@@ -1,17 +1,15 @@
-// db.js
 const mongoose = require('mongoose');
 
-const connectToDB = async () => {
+async function connectToDB() {
   try {
     await mongoose.connect(process.env.MONGO || 'mongodb://localhost:27017/BChat', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
+      // No deprecated options
     });
-    console.log('DB connection successful');
-  } catch (err) {
-    console.error('MongoDB connection error:', err.message);
-    process.exit(1);
+    console.log('Connected to MongoDB');
+  } catch (error) {
+    console.error('MongoDB connection error:', error.message);
+    throw error;
   }
-};
+}
 
 module.exports = connectToDB;

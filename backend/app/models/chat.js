@@ -1,14 +1,13 @@
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
 
-const ChatSchema = mongoose.Schema({
-    time: Date,
-    user:String,
-    room: String,
-    data: String,
-    broadcast:Number,
-    unicast:Boolean,
-    toUser:String
-})
+const ChatSchema = new mongoose.Schema({
+  time: { type: Date, default: Date.now },
+  user: { type: String, required: true },
+  room: { type: String, required: true },
+  data: String,
+  broadcast: Number,
+  unicast: Boolean,
+  toUser: String,
+});
 
-//gonna shows up in atlas
-module.exports=mongoose.model('Chat', ChatSchema, 'chats');
+module.exports = mongoose.model('Chat', ChatSchema, 'chats');
