@@ -31,7 +31,7 @@ const Home = ()=>{
                 value={room}
                 onChange={e=> setRoom(e.target.value)}
                 />
-                <div class={`neumorphic variation ${clicked? "pressed neumorphic--pressed":"notpressed"}`} role="button" style={{cursor:"pointer"}} onClick={join}>
+                <div className={`neumorphic variation ${clicked? "pressed neumorphic--pressed":"notpressed"}`} role="button" style={{cursor:"pointer"}} onClick={join}>
                     <span><strong>Join</strong></span>
                 </div>
 
