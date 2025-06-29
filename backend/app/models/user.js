@@ -64,8 +64,8 @@ userSchema.pre('save', function(next) {
   next();
 });
 
-// Index for better performance
-userSchema.index({ username: 1 });
-userSchema.index({ email: 1 });
+// // Index for better performance
+// userSchema.index({ username: 1 });
+// userSchema.index({ email: 1 });
 
 module.exports = mongoose.model('User', userSchema);
