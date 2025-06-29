@@ -4,7 +4,8 @@
   "description": "Backend for chat application",
   "main": "app.js",
   "scripts": {
-    "start": "nodemon app.js"
+    "start": "nodemon app.js",
+    "build": "echo 'No build step for backend'"
   },
   "author": "Shreyash Ghanekar",
   "license": "MIT",

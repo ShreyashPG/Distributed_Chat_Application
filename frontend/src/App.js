@@ -5,7 +5,7 @@ import { MessageCircle, Send, Users, Settings, LogOut, Lock, Plus, Search, Eye, 
 import axios from 'axios';
 import socketIOClient from 'socket.io-client';
 
-const ENDPOINT = 'http://localhost:8080';
+const ENDPOINT = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
 
 const FastChat = () => {
   // Authentication states

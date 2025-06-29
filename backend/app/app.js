@@ -23,7 +23,7 @@ const httpServer = http.createServer(app);
 
 const io = socketio(httpServer, {
   cors: {
-    origin: '*',
+    origin: process.env.ALLOWED_ORIGINS || 'http://localhost:3000',
   },
 });
 
