@@ -13,6 +13,7 @@ const Chat = require('./models/chat');
 const User = require('./models/user');
 const Room = require('./models/room');
 const ServerChat = require('./routes/serverChats');
+require('dotenv').config(); 
 
 const SERVER_NAME = process.env.SERVER_NAME || 'FASTCHAT';
 const PORT = process.env.PORT || 8080;
@@ -62,46 +63,50 @@ const upload = multer({
   }
 });
 
-// Redis client setup
-const redisConfig = {
-  socket: {
-    host: 'localhost',
-    port: 6379,
-  },
+
+const redisUrl = process.env.REDIS_URL;
+
+const clients = {
+  publisher: redis.createClient({ url: redisUrl }),
+  subscriber1: redis.createClient({ url: redisUrl }),
+  subscriber2: redis.createClient({ url: redisUrl }),
+  subscriber3: redis.createClient({ url: redisUrl }),
 };
 
-const publisher = redis.createClient(redisConfig);
-const subscriber1 = redis.createClient(redisConfig);
-const subscriber2 = redis.createClient(redisConfig);
-const subscriber3 = redis.createClient(redisConfig);
+const connectClient = async (client, name) => {
+  client.on('error', (err) => {
+    console.error(`${name} Redis Error:`, err.message);
+  });
 
-let connections = {};
+  await client.connect();
+  console.log(`${name} connected to Redis`);
+};
 
 async function startServer() {
   try {
-    // Redis connections
     await Promise.all([
-      publisher.connect(),
-      subscriber1.connect(),
-      subscriber2.connect(),
-      subscriber3.connect(),
+      connectClient(clients.publisher, 'Publisher'),
+      connectClient(clients.subscriber1, 'Subscriber1'),
+      connectClient(clients.subscriber2, 'Subscriber2'),
+      connectClient(clients.subscriber3, 'Subscriber3'),
     ]);
-    console.log('Redis clients connected');
+
+    console.log('All Redis clients connected');
 
     // MongoDB connection
     await connectToDB();
     console.log('MongoDB connected');
 
     // Redis channel subscriptions
-    await subscriber1.subscribe('fastchat-chats', () => {
+    await clients.subscriber1.subscribe('fastchat-chats', () => {
       console.log(`${SERVER_NAME} subscribed to fastchat-chats`);
     });
 
-    await subscriber2.subscribe('fastchat-rooms', () => {
+    await clients.subscriber2.subscribe('fastchat-rooms', () => {
       console.log(`${SERVER_NAME} subscribed to fastchat-rooms`);
     });
 
-    await subscriber3.subscribe('fastchat-users', () => {
+    await clients.subscriber3.subscribe('fastchat-users', () => {
       console.log(`${SERVER_NAME} subscribed to fastchat-users`);
     });
 
@@ -286,8 +291,8 @@ async function startServer() {
         });
 
         await room.save();
-        await publisher.lPush('roomFASTCHAT', trimmedRoomName);
-        await publisher.publish('fastchat-rooms', '1');
+        await clients.publisher.lPush('roomFASTCHAT', trimmedRoomName);
+        await clients.publisher.publish('fastchat-rooms', '1');
 
         res.status(201).json({
           message: 'Room created successfully',
@@ -385,7 +390,7 @@ async function startServer() {
       socket.emit('log', `App is connected to ${SERVER_NAME}`);
 
       try {
-        const rooms = await publisher.lRange('roomFASTCHAT', 0, -1);
+        const rooms = await clients.publisher.lRange('roomFASTCHAT', 0, -1);
         socket.emit('room', rooms);
       } catch (err) {
         console.error('Error fetching rooms:', err.message);
@@ -429,7 +434,7 @@ async function startServer() {
             await room.save();
           }
           
-          await publisher.publish('fastchat-chats', JSON.stringify(data));
+          await clients.publisher.publish('fastchat-chats', JSON.stringify(data));
 
           if (data.unicast) {
             socket.emit('message', data);
@@ -465,8 +470,8 @@ async function startServer() {
           socket.join(data.room);
           console.log(`${socket.user.username} joined room ${data.room}`);
 
-          await publisher.lPush(`${data.room}_meta`, socket.user.username);
-          await publisher.publish('fastchat-users', data.room);
+          await clients.publisher.lPush(`${data.room}_meta`, socket.user.username);
+          await clients.publisher.publish('fastchat-users', data.room);
           socket.emit('log', `Connected to ${data.room} at ${SERVER_NAME}`);
         } catch (err) {
           console.error('Join room error:', err.message);
@@ -481,8 +486,8 @@ async function startServer() {
       });
     });
 
-    // Redis subscribers
-    subscriber1.on('message', async (channel, msg) => {
+    // Redis clients.subscribers
+    clients.subscriber1.on('message', async (channel, msg) => {
       try {
         const data = JSON.parse(msg);
         if (data.broadcast) {
@@ -493,22 +498,22 @@ async function startServer() {
           io.to(data.room).emit('message', data);
         }
       } catch (err) {
-        console.error(`${SERVER_NAME}: Subscriber1 error`, err.message);
+        console.error(`${SERVER_NAME}: clients.subscriber1 error`, err.message);
       }
     });
 
-    subscriber2.on('message', async () => {
+    clients.subscriber2.on('message', async () => {
       try {
-        const rooms = await publisher.lRange('roomFASTCHAT', 0, -1);
+        const rooms = await clients.publisher.lRange('roomFASTCHAT', 0, -1);
         io.emit('room', rooms);
       } catch (err) {
         console.error('Error emitting room data:', err.message);
       }
     });
 
-    subscriber3.on('message', async (channel, room) => {
+    clients.subscriber3.on('message', async (channel, room) => {
       try {
-        const users = await publisher.lRange(`${room}_meta`, 0, -1);
+        const users = await clients.publisher.lRange(`${room}_meta`, 0, -1);
         io.to(room).emit('roomusers', users);
       } catch (err) {
         console.error('Error emitting roomusers:', err.message);
