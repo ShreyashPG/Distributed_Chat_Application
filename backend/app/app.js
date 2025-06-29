@@ -385,6 +385,8 @@ async function startServer() {
       });
     });
 
+    const connections = {};
+
     io.on('connection', async (socket) => {
       console.log(`New connection: ${socket.id} - User: ${socket.user.username}`);
       socket.emit('log', `App is connected to ${SERVER_NAME}`);
