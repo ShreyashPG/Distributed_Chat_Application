@@ -516,7 +516,7 @@ async function startServer() {
     });
 
     httpServer.listen(PORT, () => {
-      console.log(`FastChat Server Running @ http://localhost:${PORT}`);
+     console.log(`FastChat Server Running on port ${PORT}`);
     });
   } catch (err) {
     console.error('Startup error:', err.message);
