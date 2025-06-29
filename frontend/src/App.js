@@ -247,50 +247,65 @@ const FastChat = () => {
   };
   
   // Message handling
-  const sendMessage = () => {
-    const isUnicast = !isBroadcast && toUser !== '';
-    
-    if (room === '' && !isBroadcast && !isUnicast) {
-      alert('Either join a chatroom, broadcast, or use direct messaging');
-      return;
-    }
-    
+ const readFileAsDataURL = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+const sendMessage = async () => {
+  const isUnicast = !isBroadcast && toUser !== '';
+
+  if (room === '' && !isBroadcast && !isUnicast) {
+    alert('Either join a chatroom, broadcast, or use direct messaging');
+    return;
+  }
+
+  try {
     if (img) {
-      const reader = new FileReader();
-      reader.readAsDataURL(img);
-      
-      reader.onload = () => {
-        const data = {
-          time: new Date(),
-          user: currentUser.username,
-          room: room,
-          data: reader.result,
-          type: 'image',
-          broadcast: Number(isBroadcast),
-          unicast: isUnicast,
-          toUser: toUser
-        };
-        socket.emit('message', JSON.stringify(data));
-        setImg(null);
+      const base64 = await readFileAsDataURL(img);
+
+      const data = {
+        time: new Date(),
+        user: currentUser.username,
+        room,
+        data: base64,
+        type: 'image',
+        broadcast: Number(isBroadcast),
+        unicast: isUnicast,
+        toUser,
       };
+
+      socket.emit('message', JSON.stringify(data));
+      setImg(null);
+      return; // important!
     }
-    
+
     if (input !== '') {
       const data = {
         time: new Date(),
         user: currentUser.username,
-        room: room,
+        room,
         data: input,
         type: 'text',
         broadcast: Number(isBroadcast),
         unicast: isUnicast,
-        toUser: toUser
+        toUser,
       };
+
       socket.emit('message', JSON.stringify(data));
       setInput('');
       setToUser('');
     }
-  };
+  } catch (err) {
+    console.error('Error sending message:', err);
+    alert('Failed to send image.');
+  }
+};
+
   
   const filteredMessages = messages.filter(msg => {
     if (!msg) return false;
@@ -539,7 +554,10 @@ const FastChat = () => {
                 {filteredMessages.length === 0 ? (
                   <div className="text-center text-gray-400">No messages yet</div>
                 ) : (
-                  filteredMessages.map((msg, index) => (
+                  filteredMessages.map((msg, index) => {
+                          console.log('Rendering msg:', msg);
+                    return (
+                   
                     <div key={index} className="flex flex-col space-y-1">
                       <div className="flex items-center space-x-2 text-xs text-gray-400">
                         <span>{new Date(msg.time).toLocaleString()}</span>
@@ -563,21 +581,23 @@ const FastChat = () => {
                               <span className="text-gray-400">→ {msg.toUser}</span>
                             )}
                           </div>
-                          <div className="mt-1">
-                            {msg.type === 'image' ? (
-                              <img 
-                                src={msg.data} 
-                                alt="Shared image" 
-                                className="max-w-xs max-h-64 rounded-lg"
-                              />
-                            ) : (
-                              <p className="text-gray-200">{msg.data}</p>
-                            )}
+                        
+                      
+                                   <div className="mt-1">
+                                                                                         {typeof msg.data === 'string' && msg.data.startsWith('data:image') ? (
+                                                                                        <img
+                                                                                src={msg.data}
+                                                                                 alt="Shared"
+                                                                                 className="max-w-xs max-h-64 rounded-lg border border-gray-600"
+                                                                    />
+                                                          ) : (
+                                               <p className="text-gray-200 whitespace-pre-wrap break-words">{msg.data}</p>
+                                         )}
                           </div>
                         </div>
                       </div>
                     </div>
-                  ))
+                  )})
                 )}
                 <div ref={messagesEndRef} />
               </div>

@@ -6,6 +6,9 @@ const redis = require('redis');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const Chat = require('./models/chat');
 const User = require('./models/user');
 const Room = require('./models/room');
@@ -22,6 +25,41 @@ const io = socketio(httpServer, {
   cors: {
     origin: '*',
   },
+});
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Multer configuration for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed!'));
+    }
+  }
 });
 
 // Redis client setup
@@ -68,46 +106,94 @@ async function startServer() {
     });
 
     // Middleware
-    app.use(express.json());
+    app.use(express.json({ limit: '10mb' }));
+    app.use(express.urlencoded({ extended: true, limit: '10mb' }));
     app.use(cors());
+    
+    // Serve static files (images)
+    app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+    
     app.use('/chat', ServerChat);
+
+    // Authentication middleware
+    function authenticateToken(req, res, next) {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader && authHeader.split(' ')[1];
+
+      if (!token) {
+        return res.status(401).json({ error: 'Access token required' });
+      }
+
+      jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) {
+          return res.status(403).json({ error: 'Invalid token' });
+        }
+        req.user = user;
+        next();
+      });
+    }
 
     // Authentication Routes
     app.post('/api/register', async (req, res) => {
       try {
         const { username, password, email } = req.body;
 
+        // Input validation
         if (!username || !password) {
           return res.status(400).json({ error: 'Username and password are required' });
         }
 
+        if (username.length < 3) {
+          return res.status(400).json({ error: 'Username must be at least 3 characters long' });
+        }
+
+        if (password.length < 6) {
+          return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        }
+
+        // Check for existing user with case-insensitive search
         const existingUser = await User.findOne({ 
-          $or: [{ username }, { email }]
+          $or: [
+            { username: { $regex: new RegExp(`^${username}$`, 'i') } },
+            ...(email ? [{ email: { $regex: new RegExp(`^${email}$`, 'i') } }] : [])
+          ]
         });
 
         if (existingUser) {
-          return res.status(400).json({ error: 'Username or email already exists' });
+          if (existingUser.username.toLowerCase() === username.toLowerCase()) {
+            return res.status(400).json({ error: 'Username already exists' });
+          }
+          if (email && existingUser.email && existingUser.email.toLowerCase() === email.toLowerCase()) {
+            return res.status(400).json({ error: 'Email already exists' });
+          }
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const user = new User({
-          username,
-          password: hashedPassword,
-          email,
-          createdAt: new Date()
-        });
+        const hashedPassword = await bcrypt.hash(password, 12);
+      const user = new User({
+  username: username.trim(),
+  password: hashedPassword,
+  createdAt: new Date(),
+  ...(email ? { email: email.trim().toLowerCase() } : {})
+});
 
         await user.save();
-        const token = jwt.sign({ userId: user._id, username }, JWT_SECRET);
+        const token = jwt.sign({ userId: user._id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
 
         res.status(201).json({
           message: 'User registered successfully',
           token,
-          user: { id: user._id, username, email }
+          user: { id: user._id, username: user.username, email: user.email }
         });
       } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({ error: 'Registration failed' });
+        
+        // Handle MongoDB duplicate key error
+        if (error.code === 11000) {
+          const field = Object.keys(error.keyPattern)[0];
+          return res.status(400).json({ error: `${field} already exists` });
+        }
+        
+        res.status(500).json({ error: 'Registration failed. Please try again.' });
       }
     });
 
@@ -119,7 +205,11 @@ async function startServer() {
           return res.status(400).json({ error: 'Username and password are required' });
         }
 
-        const user = await User.findOne({ username });
+        // Case-insensitive username search
+        const user = await User.findOne({ 
+          username: { $regex: new RegExp(`^${username}$`, 'i') } 
+        });
+        
         if (!user) {
           return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -129,16 +219,36 @@ async function startServer() {
           return res.status(401).json({ error: 'Invalid credentials' });
         }
 
-        const token = jwt.sign({ userId: user._id, username }, JWT_SECRET);
+        const token = jwt.sign({ userId: user._id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
 
         res.json({
           message: 'Login successful',
           token,
-          user: { id: user._id, username, email: user.email }
+          user: { id: user._id, username: user.username, email: user.email }
         });
       } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ error: 'Login failed' });
+      }
+    });
+
+    // Image upload endpoint
+    app.post('/api/upload', authenticateToken, upload.single('image'), (req, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ error: 'No image file provided' });
+        }
+
+        const imageUrl = `/uploads/${req.file.filename}`;
+        
+        res.json({
+          message: 'Image uploaded successfully',
+          imageUrl: imageUrl,
+          filename: req.file.filename
+        });
+      } catch (error) {
+        console.error('Image upload error:', error);
+        res.status(500).json({ error: 'Failed to upload image' });
       }
     });
 
@@ -148,11 +258,16 @@ async function startServer() {
         const { roomName, password, description } = req.body;
         const { username } = req.user;
 
-        if (!roomName) {
+        if (!roomName || roomName.trim().length === 0) {
           return res.status(400).json({ error: 'Room name is required' });
         }
 
-        const existingRoom = await Room.findOne({ name: roomName });
+        const trimmedRoomName = roomName.trim();
+
+        const existingRoom = await Room.findOne({ 
+          name: { $regex: new RegExp(`^${trimmedRoomName}$`, 'i') }
+        });
+        
         if (existingRoom) {
           return res.status(400).json({ error: 'Room name already exists' });
         }
@@ -160,21 +275,23 @@ async function startServer() {
         const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
         
         const room = new Room({
-          name: roomName,
+          name: trimmedRoomName,
           password: hashedPassword,
-          description,
+          description: description ? description.trim() : '',
           creator: username,
           members: [username],
-          createdAt: new Date()
+          moderators: [username],
+          createdAt: new Date(),
+          lastActivity: new Date()
         });
 
         await room.save();
-        await publisher.lPush('roomFASTCHAT', roomName);
+        await publisher.lPush('roomFASTCHAT', trimmedRoomName);
         await publisher.publish('fastchat-rooms', '1');
 
         res.status(201).json({
           message: 'Room created successfully',
-          room: { name: roomName, description, hasPassword: !!password }
+          room: { name: trimmedRoomName, description: room.description, hasPassword: !!password }
         });
       } catch (error) {
         console.error('Room creation error:', error);
@@ -209,6 +326,7 @@ async function startServer() {
 
         if (!room.members.includes(username)) {
           room.members.push(username);
+          room.lastActivity = new Date();
           await room.save();
         }
 
@@ -224,14 +342,15 @@ async function startServer() {
 
     app.get('/api/rooms', authenticateToken, async (req, res) => {
       try {
-        const rooms = await Room.find({}, 'name description hasPassword members createdAt creator');
+        const rooms = await Room.find({}, 'name description members createdAt creator lastActivity');
         const roomsWithPasswordFlag = rooms.map(room => ({
           name: room.name,
           description: room.description,
           hasPassword: !!room.password,
           memberCount: room.members.length,
           creator: room.creator,
-          createdAt: room.createdAt
+          createdAt: room.createdAt,
+          lastActivity: room.lastActivity
         }));
         
         res.json(roomsWithPasswordFlag);
@@ -240,24 +359,6 @@ async function startServer() {
         res.status(500).json({ error: 'Failed to get rooms' });
       }
     });
-
-    // Authentication middleware
-    function authenticateToken(req, res, next) {
-      const authHeader = req.headers['authorization'];
-      const token = authHeader && authHeader.split(' ')[1];
-
-      if (!token) {
-        return res.status(401).json({ error: 'Access token required' });
-      }
-
-      jwt.verify(token, JWT_SECRET, (err, user) => {
-        if (err) {
-          return res.status(403).json({ error: 'Invalid token' });
-        }
-        req.user = user;
-        next();
-      });
-    }
 
     app.get('/', (req, res) => {
       res.send(`<h1>FastChat Backend ${SERVER_NAME}</h1>`);
@@ -306,10 +407,28 @@ async function startServer() {
             return;
           }
 
-          data.user = socket.user.username; // Ensure user from token
+          // Ensure user from token and add timestamp
+          data.user = socket.user.username;
+          data.time = new Date();
+          
+          // Handle different message types
+         if (data.type === 'image') {
+  // Ensure it's a valid base64 string — but don’t rename or move it
+  if (!data.data.startsWith('data:image')) {
+    throw new Error('Invalid image format');
+  }
+}
+
           const chat = new Chat(data);
           await chat.save();
           console.log('Message saved to DB');
+          
+          // Update room's last activity
+          if (room) {
+            room.lastActivity = new Date();
+            await room.save();
+          }
+          
           await publisher.publish('fastchat-chats', JSON.stringify(data));
 
           if (data.unicast) {
@@ -338,6 +457,10 @@ async function startServer() {
             return;
           }
 
+          // Remove user from any existing rooms
+          const userRooms = Object.keys(socket.rooms).filter(room => room !== socket.id);
+          userRooms.forEach(room => socket.leave(room));
+
           connections[socket.user.username] = socket.id;
           socket.join(data.room);
           console.log(`${socket.user.username} joined room ${data.room}`);
@@ -358,7 +481,7 @@ async function startServer() {
       });
     });
 
-    // Redis subscribers (updated channel names)
+    // Redis subscribers
     subscriber1.on('message', async (channel, msg) => {
       try {
         const data = JSON.parse(msg);
