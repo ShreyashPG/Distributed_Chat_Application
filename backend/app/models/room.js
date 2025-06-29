@@ -100,7 +100,7 @@ roomSchema.pre('save', function(next) {
 });
 
 // Index for better performance
-roomSchema.index({ name: 1 });
+// roomSchema.index({ name: 1 });
 roomSchema.index({ creator: 1 });
 roomSchema.index({ category: 1 });
 
