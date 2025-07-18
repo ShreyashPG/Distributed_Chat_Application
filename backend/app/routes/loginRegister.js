@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
+const User = require('../models/user');
 
 
   router.post('/register', async (req, res) => {
