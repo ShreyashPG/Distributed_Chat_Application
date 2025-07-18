@@ -1,10 +1,23 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, Users, Settings, LogOut, Lock, Plus, Search, Eye, EyeOff } from 'lucide-react';
+import { MessageCircle, Send, Users, Settings, LogOut, Lock, Plus, Search, Eye, EyeOff, X } from 'lucide-react';
+
 import axios from 'axios';
 import socketIOClient from 'socket.io-client';
 
 const ENDPOINT = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080';
+
+// A simple debounce helper function
+function debounce(func, delay) {
+    let timeout;
+    const debounced = function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+    debounced.cancel = () => clearTimeout(timeout);
+    return debounced;
+}
 
 const FastChat = () => {
   // Authentication states
@@ -55,6 +68,47 @@ const FastChat = () => {
   const [messageFilter, setMessageFilter] = useState('all'); // 'all', 'dm', 'group'
   
   const messagesEndRef = useRef(null);
+
+  // Search states
+     const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchLoading, setSearchLoading] = useState(false);
+
+     const handleSearch = async (query) => {
+        setSearchQuery(query);
+        if (query.trim() === '') {
+            setSearchResults([]);
+            setIsSearching(false);
+            return;
+        }
+
+        setIsSearching(true);
+        setSearchLoading(true);
+
+        try {
+            const response = await axios.post(`${ENDPOINT}/chat/search`, {
+                query: query,
+                // If in a room, you could scope search by passing `room: room`
+                // For now, we'll implement a global search.
+            });
+            setSearchResults(response.data);
+        } catch (error) {
+            console.error('Search failed:', error);
+            alert(error.response?.data?.error || 'Search failed');
+            setSearchResults([]);
+        } finally {
+            setSearchLoading(false);
+        }
+    };
+    
+    // Debounce the search function to avoid sending too many requests
+    const debouncedSearch = useRef(debounce((query) => handleSearch(query), 300)).current;
+
+        useEffect(() => {
+        // Cleanup the debouncer on component unmount
+        return () => debouncedSearch.cancel();
+    }, [debouncedSearch]);
   
   // Scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -430,6 +484,19 @@ const sendMessage = async () => {
               </div>
             )}
           </div>
+           <div className="relative w-full max-w-md">
+                       <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                        <input
+                            type="text"
+                            placeholder="Search messages..."
+                            value={searchQuery}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value);
+                                debouncedSearch(e.target.value);
+                            }}
+                            className="w-full bg-gray-700 border border-gray-600 rounded-lg py-2 pl-10 pr-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
           
           <div className="flex items-center space-x-4">
             <span className="text-gray-300">Welcome, {currentUser.username}</span>
@@ -529,8 +596,46 @@ const sendMessage = async () => {
         </div>
         
         {/* Main Chat Area */}
-        <div className="flex-1 flex flex-col">
-          {connected ? (
+        <div className="flex-1 flex flex-col relative">
+           {isSearching && (
+                        <div className="absolute inset-0 bg-gray-900 z-10 flex flex-col">
+                            <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
+                                <h3 className="text-lg font-semibold">Search Results for "{searchQuery}"</h3>
+                                <button 
+                                    onClick={() => { setIsSearching(false); setSearchQuery(''); setSearchResults([]); }}
+                                    className="p-1 rounded-full text-gray-400 hover:bg-gray-700 hover:text-white"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                {searchLoading && <div className="text-center text-gray-400 mt-8">Searching...</div>}
+                                {!searchLoading && searchResults.length === 0 && (
+                                    <div className="text-center text-gray-400 mt-8">No results found.</div>
+                                )}
+                                {!searchLoading && searchResults.map((msg, index) => (
+                                    // Re-using message rendering style for search results
+                                    <div key={index} className="flex flex-col space-y-1 p-3 bg-gray-800 rounded-lg">
+                                        <div className="flex items-center justify-between text-xs text-gray-400">
+                                            <span>{new Date(msg.time).toLocaleString()}</span>
+                                            {msg.room && <span className="font-semibold text-blue-400">#{msg.room}</span>}
+                                        </div>
+                                        <div className="flex items-start space-x-3 mt-1">
+                                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                                                {msg.user?.charAt(0)?.toUpperCase() || '?'}
+                                            </div>
+                                            <div className="flex-1">
+                                                <span className="font-medium text-blue-300">{msg.user}</span>
+                                                <p className="text-gray-200 whitespace-pre-wrap break-words mt-1">{msg.data}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+          {!isSearching && connected ? (
             <>
               {/* Message Filter */}
               <div className="p-4 border-b border-gray-700 bg-gray-800">
@@ -582,16 +687,16 @@ const sendMessage = async () => {
                           </div>
                         
                       
-                                   <div className="mt-1">
-                                                                                         {typeof msg.data === 'string' && msg.data.startsWith('data:image') ? (
-                                                                                        <img
-                                                                                src={msg.data}
-                                                                                 alt="Shared"
-                                                                                 className="max-w-xs max-h-64 rounded-lg border border-gray-600"
-                                                                    />
-                                                          ) : (
-                                               <p className="text-gray-200 whitespace-pre-wrap break-words">{msg.data}</p>
-                                         )}
+                            <div className="mt-1">
+                              {typeof msg.data === 'string' && msg.data.startsWith('data:image') ? (
+                                      <img
+                                        src={msg.data}
+                                        alt="Shared"
+                                        className="max-w-xs max-h-64 rounded-lg border border-gray-600"
+                                        />
+                                        ) : (
+                                        <p className="text-gray-200 whitespace-pre-wrap break-words">{msg.data}</p>
+                                     )}
                           </div>
                         </div>
                       </div>
