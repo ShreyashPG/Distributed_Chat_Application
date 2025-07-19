@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # The Node.js Application Service
+  app:
+    build: .
+    container_name: fastchat-app
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mounts the uploads directory to a named volume for data persistence
+      - uploads-data:/usr/src/app/uploads
+      # You can uncomment the line below for live-reloading during development
+      # - ./:/usr/src/app
+      # - /usr/src/app/node_modules
+    environment:
+      - PORT=8080
+      - MONGO=mongodb+srv://shreyasghanekar35:Datta%4023Nagar@cluster0.8tbumzm.mongodb.net/fastchat?retryWrites=true&w=majority
+      - REDIS_URL=redis://default:aw8h4QigFoVZ5ldoVRvDesVZNZaYtpNd@redis-11105.c9.us-east-1-2.ec2.redns.redis-cloud.com:11105
+      - JWT_SECRET=your-secret-key-is-very-long-and-secure-and-should-not-be-shared
+      - ALLOWED_ORIGINS=http://localhost:3000
+      - SERVER_NAME=FASTCHAT_DOCKER
+    depends_on:
+      - mongo
+      - redis
+    restart: unless-stopped
+
+  # MongoDB Database Service
+  mongo:
+    image: mongo:6.0
+    container_name: fastchat-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+  # Redis Service
+  redis:
+    image: redis:7-alpine
+    container_name: fastchat-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+# Named volumes for data persistence
+volumes:
+  mongo-data:
+  redis-data:
+  uploads-data:

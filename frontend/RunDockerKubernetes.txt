@@ -1,0 +1,17 @@
+Deployment Steps:
+
+Build and Push the Image:
+
+docker build --build-arg REACT_APP_API_BASE_URL=http://your-backend-loadbalancer-ip -t Distributed_Chat_Application/fastchat-frontend:latest .
+
+docker push Distributed_Chat_Application/fastchat-frontend:latest
+
+Update Manifests: Replace Distributed_Chat_Application/fastchat-frontend:latest in 02-frontend-deployment.yml with your image path.
+
+Apply to Cluster: Run kubectl apply -f <filename>.yml for each file.
+1. Run
+
+docker login -u shreyaspg21
+2. At the password prompt, enter the personal access token.
+
+dckr_pat_KrmGUgNdBSUGUK9Zs9TwKyESpCE

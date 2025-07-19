@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  # React Frontend Service
+  frontend:
+    build:
+      context: .
+      # Use the 'development' target from the multi-stage Dockerfile
+      target: builder
+    container_name: fastchat-frontend
+    ports:
+      # Map port 3000 on the host to port 3000 in the container
+      - "3000:3000"
+    volumes:
+      # Mount the local source code into the container for live-reloading
+      - ./src:/app/src
+      - ./public:/app/public
+    environment:
+      # This enables the hot-reloading feature
+      - WATCHPACK_POLLING=true
+      # Set the backend URL for local development
+      - REACT_APP_API_BASE_URL=http://localhost:8080
+    # The command to start the React development server
+    command: npm start

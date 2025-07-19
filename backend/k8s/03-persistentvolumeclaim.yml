@@ -1,0 +1,24 @@
+# Claims persistent storage for MongoDB data and file uploads
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-data-pvc
+  namespace: fastchat-ns
+spec:
+  accessModes:
+    - ReadWriteOnce # This PVC can be mounted as read-write by a single node
+  resources:
+    requests:
+      storage: 5Gi # Request 5 GB of storage
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uploads-pvc
+  namespace: fastchat-ns
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi # Request 2 GB for file uploads

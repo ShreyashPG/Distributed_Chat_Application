@@ -1,0 +1,41 @@
+# Deployment for the main FastChat backend application
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastchat-app-deployment
+  namespace: fastchat-ns
+spec:
+  replicas: 1 # Start with 2 replicas for high availability
+  selector:
+    matchLabels:
+      app: fastchat-app
+  template:
+    metadata:
+      labels:
+        app: fastchat-app
+    spec:
+      containers:
+        - name: fastchat-backend
+          # IMPORTANT: Replace with your actual image path
+          image: shreyaspg21/fastchat-backend:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            # Load environment variables from the secret
+            - secretRef:
+                name: fastchat-secret
+          # Add other non-sensitive env vars here
+          env:
+            - name: PORT
+              value: "8080"
+            - name: ALLOWED_ORIGINS
+              value: "https://distributed-chat-application-rho.vercel.app" # Change to your frontend URL
+            - name: SERVER_NAME
+              value: "FASTCHAT_K8S"
+          volumeMounts:
+            - name: uploads-storage
+              mountPath: /usr/src/app/uploads
+      volumes:
+        - name: uploads-storage
+          persistentVolumeClaim:
+            claimName: uploads-pvc

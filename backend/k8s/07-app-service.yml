@@ -1,0 +1,17 @@
+# Service to expose the backend application to the internet
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastchat-app-service
+  namespace: fastchat-ns
+spec:
+  type: LoadBalancer # Exposes the service using a cloud provider's load balancer
+  selector:
+    app: fastchat-app
+  # For Socket.IO to work reliably across multiple pods, sticky sessions are recommended.
+  # This directs traffic from a specific client IP to the same pod.
+  sessionAffinity: ClientIP
+  ports:
+    - protocol: TCP
+      port: 80 # The port the load balancer will listen on
+      targetPort: 8080 # The port on the pods to forward traffic to

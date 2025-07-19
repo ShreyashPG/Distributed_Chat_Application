@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # ------ Backend Service ------
+  backend:
+    build:
+      # Sets the build context to your backend app's directory
+      context: ./backend/app
+    container_name: fastchat-backend
+    ports:
+      - "8080:8080"
+    volumes:
+      - backend-uploads-data:/usr/src/app/uploads
+    environment:
+      - PORT=8080
+      # The backend connects to the 'mongo' and 'redis' service names
+      - MONGO=mongodb+srv://shreyasghanekar35:Datta%4023Nagar@cluster0.8tbumzm.mongodb.net/fastchat?retryWrites=true&w=majority
+      - REDIS_URL=redis://default:aw8h4QigFoVZ5ldoVRvDesVZNZaYtpNd@redis-11105.c9.us-east-1-2.ec2.redns.redis-cloud.com:11105
+      - JWT_SECRET=your-secret-key-is-very-long-and-secure-and-should-not-be-shared
+      - ALLOWED_ORIGINS=http://localhost:3000
+    depends_on:
+      - mongo
+      - redis
+    restart: unless-stopped
+
+  # ------ Frontend Service ------
+  frontend:
+    build:
+      # Sets the build context to your frontend directory
+      context: ./frontend
+    container_name: fastchat-frontend
+    ports:
+      - "3000:80" # Maps host port 3000 to the container's Nginx port 80
+    environment:
+      # This argument is passed to the Docker build process for the frontend
+      - REACT_APP_API_BASE_URL=http://localhost:8080
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ------ Database & Cache Services ------
+  mongo:
+    image: mongo:6.0
+    container_name: fastchat-mongo
+    volumes:
+      - mongo-data:/data/db
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: fastchat-redis
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+# Named volumes for data persistence
+volumes:
+  mongo-data:
+  redis-data:
+  backend-uploads-data:

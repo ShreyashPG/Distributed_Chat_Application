@@ -1,0 +1,5 @@
+# Creates a dedicated namespace for the application resources
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fastchat-ns

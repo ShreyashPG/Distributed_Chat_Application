@@ -1,0 +1,19 @@
+Build and push your Docker image to a container registry (e.g., Docker Hub, GCR, ECR).
+
+docker build -t Distributed_Chat_Application/fastchat-backend:latest .
+
+docker push Distributed_Chat_Application/fastchat-backend:latest
+
+Replace Distributed_Chat_Application/fastchat-backend:latest in 06-app-deployment.yml with your actual image path.
+
+Apply the manifest files to your cluster in order: kubectl apply -f <filename>.yml.
+
+
+To use the access token from your Docker CLI client:
+
+1. Run
+
+docker login -u shreyaspg21
+2. At the password prompt, enter the personal access token.
+
+dckr_pat_KrmGUgNdBSUGUK9Zs9TwKyESpCE

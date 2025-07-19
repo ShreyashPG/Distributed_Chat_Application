@@ -1,0 +1,18 @@
+# Service to expose the frontend application to the internet
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: fastchat-ns
+spec:
+  # Use LoadBalancer to get an external IP address from your cloud provider
+  type: LoadBalancer
+  selector:
+    # This must match the 'app' label in your frontend-deployment.yml
+    app: fastchat-frontend
+  ports:
+    - protocol: TCP
+      # The port the external load balancer will listen on
+      port: 80
+      # The port on the pods to forward traffic to
+      targetPort: 80

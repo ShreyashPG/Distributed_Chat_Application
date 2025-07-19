@@ -1,0 +1,26 @@
+# Deployment configuration for the FastChat frontend application
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # The deployment name must match the selector in the service
+  name: frontend-deployment
+  # Use the same namespace as your backend for easy communication
+  namespace: fastchat-ns
+spec:
+  # Run 2 replicas for high availability
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastchat-frontend
+  template:
+    metadata:
+      labels:
+        app: fastchat-frontend
+    spec:
+      containers:
+        - name: fastchat-frontend
+          # IMPORTANT: Replace with your container registry image path
+          image: shreyaspg21/fastchat-frontend:latest
+          ports:
+            # The port Nginx is serving on inside the container
+            - containerPort: 80
