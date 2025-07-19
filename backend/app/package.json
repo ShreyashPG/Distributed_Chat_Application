@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "build": "echo 'No build step for backend'"
+    "build": "echo 'No build step for backend'",
+    "lint": "eslint ."
   },
   "author": "Shreyash Ghanekar",
   "license": "MIT",
@@ -22,6 +23,7 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "eslint": "^9.31.0",
     "nodemon": "^3.1.10"
   }
 }

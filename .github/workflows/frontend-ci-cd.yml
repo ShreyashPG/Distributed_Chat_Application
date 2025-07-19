@@ -54,7 +54,7 @@ jobs:
           push: true
           build-args: |
             REACT_APP_API_BASE_URL=${{ secrets.REACT_APP_API_BASE_URL }}
-          tags: yourusername/fastchat-frontend:${{ github.sha }}, yourusername/fastchat-frontend:latest
+          tags: shreyaspg21/fastchat-frontend:${{ github.sha }}, shreyaspg21/fastchat-frontend:latest
 
       - name: Set up Kubeconfig
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -67,5 +67,5 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           kubectl set image deployment/frontend-deployment \
-            fastchat-frontend=yourusername/fastchat-frontend:${{ github.sha }} \
+            fastchat-frontend=shreyaspg21/fastchat-frontend:${{ github.sha }} \
             -n fastchat-ns

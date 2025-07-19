@@ -54,7 +54,7 @@ jobs:
           # Sets the context for the Docker build
           context: ./backend/app
           push: true
-          tags: yourusername/fastchat-backend:${{ github.sha }}, yourusername/fastchat-backend:latest
+          tags: shreyaspg21/fastchat-backend:${{ github.sha }}, shreyaspg21/fastchat-backend:latest
 
       - name: Set up Kubeconfig
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -67,5 +67,5 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           kubectl set image deployment/fastchat-app-deployment \
-            fastchat-backend=yourusername/fastchat-backend:${{ github.sha }} \
+            fastchat-backend=shreyaspg21/fastchat-backend:${{ github.sha }} \
             -n fastchat-ns
