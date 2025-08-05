@@ -128,8 +128,10 @@ async function startServer() {
         });
 
         await room.save();
-        await clients.publisher.lPush('roomFASTCHAT', trimmedRoomName);
-        await clients.publisher.publish('fastchat-rooms', '1');
+        // await clients.publisher.lPush('roomFASTCHAT', trimmedRoomName);
+        // await clients.publisher.publish('fastchat-rooms', '1');
+        const newRoomInfo = { name: trimmedRoomName, description: room.description, hasPassword: !!password, memberCount: 1 };
+await clients.publisher.publish('fastchat-rooms', JSON.stringify({ type: 'new_room', payload: newRoomInfo }));
 
         res.status(201).json({
           message: 'Room created successfully',
@@ -234,55 +236,55 @@ async function startServer() {
       } catch (err) {
         console.error('Error fetching rooms:', err.message);
       }
-
+      
       socket.on('message', async (msg) => {
-        try {
-          console.log('Received msg:', msg);
-          let data = typeof msg === 'string' ? JSON.parse(msg) : msg;
+    try {
+        const data = typeof msg === 'string' ? JSON.parse(msg) : msg;
 
-          if (!data || !data.room) {
-            throw new Error('Invalid message data');
-          }
+        // FIX: Improved and corrected validation logic
+        const isBroadcast = data.broadcast === 1 || data.broadcast === true;
+        const isUnicast = data.unicast === true;
 
-          // Verify user is member of the room
-          const room = await Room.findOne({ name: data.room });
-          if (room && !room.members.includes(socket.user.username)) {
-            socket.emit('error', 'You are not a member of this room');
-            return;
-          }
+        if (!data || !data.data) {
+            throw new Error('Invalid message payload: missing data field.');
+        }
 
-          // Ensure user from token and add timestamp
-          data.user = socket.user.username;
-          data.time = new Date();
-          
-          // Handle different message types
-         if (data.type === 'image') {
-  // Ensure it's a valid base64 string — but don’t rename or move it
-  if (!data.data.startsWith('data:image')) {
-    throw new Error('Invalid image format');
-  }
-}
+        // A group message MUST have a room. DMs and Broadcasts don't.
+        if (!isBroadcast && !isUnicast && !data.room) {
+            throw new Error('Invalid group message: missing room field.');
+        }
 
-          const chat = new Chat(data);
-          await chat.save();
-          console.log('Message saved to DB');
-          
-          // Update room's last activity
-          if (room) {
+        data.user = socket.user.username;
+        data.time = new Date();
+
+        // If it's a group message, verify membership
+        if (!isBroadcast && !isUnicast) {
+            const room = await Room.findOne({ name: data.room });
+            if (!room || !room.members.includes(socket.user.username)) {
+                return socket.emit('error', 'You are not a member of this room');
+            }
+            // Update room's last activity
             room.lastActivity = new Date();
             await room.save();
-          }
-          
-          await clients.publisher.publish('fastchat-chats', JSON.stringify(data));
-
-          if (data.unicast) {
-            socket.emit('message', data);
-          }
-        } catch (error) {
-          console.error('Message event error:', error.message);
-          socket.emit('error', 'Failed to send message');
         }
-      });
+
+        const chat = new Chat(data);
+        await chat.save();
+        console.log('Message saved to DB:', chat.data);
+
+        // Publish to Redis for other clients/servers
+        await clients.publisher.publish('fastchat-chats', JSON.stringify(data));
+        console.log('Message published to Redis.');
+        
+        // Always send immediate feedback to the sender
+        socket.emit('message', data);
+
+    } catch (error) {
+        console.error('Message event error:', error.message);
+        socket.emit('error', 'Failed to send message');
+    }
+});
+
 
       socket.on('join', async (msg) => {
         try {
@@ -327,24 +329,43 @@ async function startServer() {
 
     // Redis clients.subscribers
     clients.subscriber1.on('message', async (channel, msg) => {
-      try {
+    try {
         const data = JSON.parse(msg);
-        if (data.broadcast) {
-          io.emit('message', data);
-        } else if (data.unicast && data.toUser in connections) {
-          io.to(connections[data.toUser]).emit('message', data);
-        } else {
-          io.to(data.room).emit('message', data);
-        }
-      } catch (err) {
-        console.error(`${SERVER_NAME}: clients.subscriber1 error`, err.message);
-      }
-    });
+        console.log('Subscriber1 received message from Redis for user:', data.user);
 
-    clients.subscriber2.on('message', async () => {
+        if (data.broadcast) {
+            // For broadcast, send to everyone
+            io.emit('message', data);
+            console.log('Subscriber1 broadcasting message.');
+        } else if (data.unicast) {
+            // For DMs, only send to the intended receiver
+            // The sender already received it via `socket.emit` in the message handler
+            if (data.toUser && connections[data.toUser]) {
+                io.to(connections[data.toUser]).emit('message', data);
+                console.log(`Subscriber1 sending DM to ${data.toUser}`);
+            }
+        } else if (data.room) {
+            // For group messages, send to the room
+            // The sender already received it, so we use `socket.broadcast.to`
+            // A simpler way is just to emit to the room, the client can handle duplicates if any.
+            // `io.to(room)` is the best practice here.
+            io.to(data.room).emit('message', data);
+            console.log(`Subscriber1 sending message to room ${data.room}`);
+        }
+    } catch (err) {
+        console.error(`${SERVER_NAME}: subscriber1 error`, err.message);
+    }
+});
+
+    clients.subscriber2.on('message', async (channel, msg) => {
       try {
-        const rooms = await clients.publisher.lRange('roomFASTCHAT', 0, -1);
-        io.emit('room', rooms);
+        // const rooms = await clients.publisher.lRange('roomFASTCHAT', 0, -1);
+        // io.emit('room', rooms);
+         const data = JSON.parse(msg);
+        if (data.type === 'new_room') {
+            // Emit an event that the client can use to just add one room
+            io.emit('new_room_added', data.payload);
+        }
       } catch (err) {
         console.error('Error emitting room data:', err.message);
       }
